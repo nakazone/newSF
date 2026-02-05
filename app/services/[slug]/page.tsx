@@ -6,9 +6,76 @@ import { prisma } from '@/lib/prisma'
 import { generateMetadata as generateSEOMetadata } from '@/lib/seo'
 import { generateServiceSchema, generateFAQSchema } from '@/lib/schema'
 import { portfolioProjects } from '@/data/portfolioProjects'
+import { getServiceBySlug, getAllServiceSlugs } from '@/data/services'
+import { menuServices } from '@/data/menuServices'
 import { CTA } from '@/components/ui/CTA'
 import { EstimateForm } from '@/components/forms/EstimateForm'
 import { CheckCircle, Clock, Shield } from 'lucide-react'
+
+/** Service shape expected by this page (Prisma or static fallback). */
+type ServiceForPage = {
+  name: string
+  slug: string
+  description: string
+  benefits: string
+  process: string
+  faqs: string
+  published: boolean
+  metaTitle: string | null
+  metaDescription: string | null
+  keywords: string | null
+  enableFAQSchema: boolean
+  enableServiceSchema: boolean
+}
+
+async function getServiceForPage(slug: string): Promise<ServiceForPage | null> {
+  try {
+    const fromDb = await prisma.service.findUnique({
+      where: { slug },
+    })
+    if (fromDb && fromDb.published) return fromDb as unknown as ServiceForPage
+  } catch {
+    /* DB unavailable, use static fallback */
+  }
+
+  const fromStatic = getServiceBySlug(slug)
+  if (fromStatic) {
+    return {
+      name: fromStatic.name,
+      slug: fromStatic.slug,
+      description: fromStatic.description,
+      benefits: Array.isArray(fromStatic.benefits) ? JSON.stringify(fromStatic.benefits) : (fromStatic.benefits ?? '[]'),
+      process: Array.isArray(fromStatic.process) ? JSON.stringify(fromStatic.process) : (fromStatic.process ?? '[]'),
+      faqs: Array.isArray(fromStatic.faqs) ? JSON.stringify(fromStatic.faqs) : (fromStatic.faqs ?? '[]'),
+      published: true,
+      metaTitle: fromStatic.metaTitle ?? null,
+      metaDescription: fromStatic.metaDescription ?? null,
+      keywords: Array.isArray(fromStatic.keywords) ? fromStatic.keywords.join(', ') : (fromStatic.keywords ?? null),
+      enableFAQSchema: fromStatic.enableFAQSchema ?? true,
+      enableServiceSchema: fromStatic.enableServiceSchema ?? true,
+    }
+  }
+
+  const fromMenu = menuServices.find((s) => s.href === `/services/${slug}` || s.href.replace('/services/', '') === slug)
+  if (fromMenu) {
+    return {
+      name: fromMenu.name,
+      slug: slug,
+      description: fromMenu.shortDescription,
+      benefits: '[]',
+      process: '[]',
+      faqs: '[]',
+      published: true,
+      metaTitle: null,
+      metaDescription: null,
+      keywords: null,
+      enableFAQSchema: false,
+      enableServiceSchema: true,
+    }
+  }
+
+  return null
+}
 
 export async function generateStaticParams() {
   try {
@@ -18,19 +85,16 @@ export async function generateStaticParams() {
     })
     return services.map((service) => ({ slug: service.slug }))
   } catch {
-    return []
+    const staticSlugs = getAllServiceSlugs().map((slug) => ({ slug }))
+    const menuSlugs = menuServices.map((s) => ({ slug: s.href.replace(/^\/services\//, '') }))
+    return [...staticSlugs, ...menuSlugs]
   }
 }
 
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
-  const service = await prisma.service.findUnique({
-    where: { slug: params.slug },
-  })
-  
-  if (!service || !service.published) {
-    return {}
-  }
-
+  if (!params?.slug) return {}
+  const service = await getServiceForPage(params.slug)
+  if (!service) return {}
   return generateSEOMetadata({
     title: service.metaTitle || service.name,
     description: service.metaDescription || service.description,
@@ -40,13 +104,9 @@ export async function generateMetadata({ params }: { params: { slug: string } })
 }
 
 export default async function ServicePage({ params }: { params: { slug: string } }) {
-  const service = await prisma.service.findUnique({
-    where: { slug: params.slug },
-  })
-
-  if (!service || !service.published) {
-    notFound()
-  }
+  if (!params?.slug) notFound()
+  const service = await getServiceForPage(params.slug)
+  if (!service) notFound()
 
   const benefits = JSON.parse(service.benefits || '[]')
   const process = JSON.parse(service.process || '[]')
