@@ -1,14 +1,24 @@
 <?php
 /**
  * Configuração base – Senior Floors (versão PHP)
- * Para rodar em www.senior-floors.com/newsite
+ * Para rodar em www.senior-floors.com/newsite ou localhost
  */
 
-// Base path do site (subpasta no domínio)
-define('BASE_PATH', '/newsite');
+// Detectar localhost para usar base path vazio
+$isLocalhost = !empty($_SERVER['HTTP_HOST']) && (
+    $_SERVER['HTTP_HOST'] === 'localhost' ||
+    $_SERVER['HTTP_HOST'] === '127.0.0.1' ||
+    strpos($_SERVER['HTTP_HOST'], 'localhost:') === 0 ||
+    strpos($_SERVER['HTTP_HOST'], '127.0.0.1:') === 0
+);
 
-// URL completa do site (sem barra no final)
-define('SITE_URL', 'https://www.senior-floors.com' . BASE_PATH);
+if ($isLocalhost) {
+    define('BASE_PATH', '');
+    define('SITE_URL', 'http://' . ($_SERVER['HTTP_HOST'] ?? 'localhost:8000'));
+} else {
+    define('BASE_PATH', '/newsite');
+    define('SITE_URL', 'https://www.senior-floors.com' . BASE_PATH);
+}
 
 // Telefone e email
 define('PHONE', '(720) 751-9813');

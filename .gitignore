@@ -35,6 +35,10 @@ prisma/*.db-journal
 # PHP data/logs
 php/data/estimates.txt
 
+# deploy package (gerado localmente)
+deploy-package.zip
+php 2/
+
 # vercel
 .vercel
 
